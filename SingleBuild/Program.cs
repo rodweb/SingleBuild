@@ -85,7 +85,7 @@ namespace SingleBuild
                 }
                 SuccessExit();
             }
-            else if (Path.Equals(Directory.GetParent(currentDir).FullName, Directory.GetDirectoryRoot(currentDir)))
+            else if (!ParentDirectoryExists(currentDir))
             {
                 Console.WriteLine(CSPROJ_NOT_FOUND);
                 FailExit();
@@ -97,19 +97,9 @@ namespace SingleBuild
             }
         }
 
-        private static bool isStringInFile(string file, string text)
+        private static bool ParentDirectoryExists(string dir)
         {
-            var found = false;
-            foreach (var line in File.ReadLines(file))
-            {
-                if (line.Contains(text))
-                {
-                    found = true;
-                    break;
-                }
-            }
-
-            return found;
+            return (Directory.GetParent(dir) != null);
         }
 
         private static void ExecuteProcess(string csprojFile)
@@ -180,7 +170,22 @@ namespace SingleBuild
             return compilerInfo;
         }
 
-        #region >> UTILITY        
+        #region >> UTILITY   
+        private static bool isStringInFile(string file, string text)
+        {
+            var found = false;
+            foreach (var line in File.ReadLines(file))
+            {
+                if (line.Contains(text))
+                {
+                    found = true;
+                    break;
+                }
+            }
+
+            return found;
+        }
+
         private static string GetDirectoryFromPath(string fullPath)
         {
             return (File.Exists(fullPath) ? Path.GetDirectoryName(fullPath) : fullPath);
