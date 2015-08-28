@@ -8,15 +8,30 @@ using System.IO;
 
 namespace SingleBuild
 {
+
+    internal class FileInfo
+    {
+        public string fileName { get; set; }
+        public string directory { get; set; }
+    }
+
     class Program
     {
+        private const string BUILD_FAIL = "Build falhou!";
+        private const string BUILD_SUCCEEDED = "Build OK!";
+
         static void Main(string[] args)
         {
             CheckArguments(args);
 
-            var currentDir = args[0];
+            var fullPath = args[0];
 
-            FindAndExecute(currentDir);
+            var info = new FileInfo { 
+                fileName =  Path.GetFileName(fullPath),
+                directory = Path.GetDirectoryName(fullPath)
+            };
+
+            FindAndExecute(info);
         }
 
         private static void CheckArguments(string[] args)
@@ -24,34 +39,66 @@ namespace SingleBuild
             if (args.Count() == 0)
             {
                 Console.WriteLine("Argumento não informado.");
-                Environment.Exit(1);
+                FailExit();
             }
 
-            if (!Directory.Exists(args[0]))
+            if (!Directory.Exists(Path.GetDirectoryName(args[0])))
             {
                 Console.WriteLine("Diretório inválido.");
-                Environment.Exit(1);
+                FailExit();
             }            
         }
 
-        private static void FindAndExecute(string currentDir)
+        private static void FindAndExecute(FileInfo info)
         {
+            var currentDir = info.directory;
+
             string[] projects = Directory.GetFiles(currentDir, "*.csproj");
 
             if (projects.Count() > 0)
             {
-                ExecuteProcess(projects[0]);
-                Environment.Exit(0);
+                if (info.fileName.Equals(string.Empty))
+                {
+                    ExecuteProcess(projects[0]);
+                }
+                else
+                {
+                    foreach (var project in projects)
+                    {
+                        if (isStringInFile(project, info.fileName))
+                        {
+                            ExecuteProcess(project);
+                            break;
+                        }
+                    }
+                }
+                SuccessExit();
             }
             else if (Path.Equals(Directory.GetParent(currentDir).FullName, Directory.GetDirectoryRoot(currentDir)))
             {
                 Console.WriteLine("Arquivo .csproj não encontrado.");
-                Environment.Exit(1);
+                FailExit();
             }
             else
             {
-                FindAndExecute(Directory.GetParent(currentDir).FullName);
+                info.directory = Directory.GetParent(currentDir).FullName;
+                FindAndExecute(info);
             }
+        }
+
+        private static bool isStringInFile(string file, string text)
+        {
+            var found = false;
+            foreach (var line in File.ReadLines(file))
+            {
+                if (line.Contains(text))
+                {
+                    found = true;
+                    break;
+                }
+            }
+
+            return found;
         }
 
         private static void ExecuteProcess(string csprojFile)
@@ -60,10 +107,12 @@ namespace SingleBuild
 
             string fullPath = Path.Combine(systemRoot, @"Microsoft.NET\Framework\v4.0.30319\MSBuild.exe");
 
+            int exitCode = 0;
+
             if (!File.Exists(fullPath))
             {
                 Console.WriteLine("MSbuild.exe não foi encontrado.");
-                Environment.Exit(1);
+                FailExit();
             }
             
             ProcessStartInfo compilerInfo = new ProcessStartInfo();
@@ -74,10 +123,11 @@ namespace SingleBuild
             compilerInfo.UseShellExecute = false;
             compilerInfo.RedirectStandardError = true;
 
-            int exitCode = 0;
+            Stopwatch stopwatch = new Stopwatch();
 
             try
             {
+                stopwatch.Start();
                 using (Process compiler = Process.Start(compilerInfo))
                 {
                     Console.WriteLine(compiler.StandardError.ReadToEnd());
@@ -87,15 +137,33 @@ namespace SingleBuild
                     exitCode = compiler.ExitCode;
                 }
             }
-            catch(Exception)
+            catch (Exception)
             {
-                Environment.Exit(1);
+                FailExit();
+            }
+            finally
+            {
+                stopwatch.Stop();
             }
 
             if (exitCode == 0)
-                Console.WriteLine("Build ok.");
+                Console.WriteLine(BUILD_SUCCEEDED);
             else
-                Console.WriteLine("Erro no build.");
+                Console.WriteLine(BUILD_FAIL);
+
+            Console.WriteLine("Tempo de execução: {0}ms", stopwatch.ElapsedMilliseconds.ToString());
+
+            SuccessExit();
+        }
+
+        private static void FailExit()
+        {
+            Environment.Exit(1);
+        }
+
+        private static void SuccessExit()
+        {
+            Environment.Exit(0);
         }
     }
 }
