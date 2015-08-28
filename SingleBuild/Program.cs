@@ -17,8 +17,17 @@ namespace SingleBuild
 
     class Program
     {
+        #region >> CONSTANTS
+        
         private const string BUILD_FAIL = "Build falhou!";
         private const string BUILD_SUCCEEDED = "Build OK!";
+        private const string TIME_ELAPSED_FORMAT = "Tempo de execução: {0}ms";
+        private const string CSPROJ_NOT_FOUND = "Arquivo .csproj não encontrado.";
+        private const string CSPROJ_FILTER = "*.csproj";
+        private const string INVALID_DIRECTORY = "Diretório inválido.";
+        private const string INVALID_ARGUMENT = "Argumento não informado.";
+
+        #endregion << CONSTANTS
 
         static void Main(string[] args)
         {
@@ -26,25 +35,27 @@ namespace SingleBuild
 
             var fullPath = args[0];
 
-            var info = new FileInfo { 
-                fileName =  Path.GetFileName(fullPath),
-                directory = Path.GetDirectoryName(fullPath)
+            var info = new FileInfo {
+                fileName = GetFileNameFromPath(fullPath),
+                directory = GetDirectoryFromPath(fullPath)
             };
 
             FindAndExecute(info);
-        }
+        } 
 
         private static void CheckArguments(string[] args)
         {
             if (args.Count() == 0)
             {
-                Console.WriteLine("Argumento não informado.");
+                Console.WriteLine(INVALID_ARGUMENT);
                 FailExit();
             }
 
-            if (!Directory.Exists(Path.GetDirectoryName(args[0])))
+            var dirPath = GetDirectoryFromPath(args[0]);
+
+            if (!Directory.Exists(dirPath))
             {
-                Console.WriteLine("Diretório inválido.");
+                Console.WriteLine(INVALID_DIRECTORY);
                 FailExit();
             }            
         }
@@ -53,7 +64,7 @@ namespace SingleBuild
         {
             var currentDir = info.directory;
 
-            string[] projects = Directory.GetFiles(currentDir, "*.csproj");
+            string[] projects = Directory.GetFiles(currentDir, CSPROJ_FILTER);
 
             if (projects.Count() > 0)
             {
@@ -76,7 +87,7 @@ namespace SingleBuild
             }
             else if (Path.Equals(Directory.GetParent(currentDir).FullName, Directory.GetDirectoryRoot(currentDir)))
             {
-                Console.WriteLine("Arquivo .csproj não encontrado.");
+                Console.WriteLine(CSPROJ_NOT_FOUND);
                 FailExit();
             }
             else
@@ -103,25 +114,11 @@ namespace SingleBuild
 
         private static void ExecuteProcess(string csprojFile)
         {
-            string systemRoot = Environment.GetEnvironmentVariable("SystemRoot");
-
-            string fullPath = Path.Combine(systemRoot, @"Microsoft.NET\Framework\v4.0.30319\MSBuild.exe");
-
             int exitCode = 0;
 
-            if (!File.Exists(fullPath))
-            {
-                Console.WriteLine("MSbuild.exe não foi encontrado.");
-                FailExit();
-            }
-            
-            ProcessStartInfo compilerInfo = new ProcessStartInfo();
-            compilerInfo.Arguments = String.Concat("/t:Build /nologo /clp:NoSummary;ErrorsOnly; /target:Compile /verbosity:quiet ", csprojFile);
-            compilerInfo.FileName = fullPath;
-            compilerInfo.WindowStyle = ProcessWindowStyle.Hidden;
-            compilerInfo.CreateNoWindow = true;
-            compilerInfo.UseShellExecute = false;
-            compilerInfo.RedirectStandardError = true;
+            string msbuildPath = GetMSbuildPath();
+
+            ProcessStartInfo compilerInfo = GetMSbuildProcessInfo(msbuildPath, csprojFile);
 
             Stopwatch stopwatch = new Stopwatch();
 
@@ -151,10 +148,48 @@ namespace SingleBuild
             else
                 Console.WriteLine(BUILD_FAIL);
 
-            Console.WriteLine("Tempo de execução: {0}ms", stopwatch.ElapsedMilliseconds.ToString());
+            Console.WriteLine(TIME_ELAPSED_FORMAT, stopwatch.ElapsedMilliseconds.ToString());
 
             SuccessExit();
         }
+
+        private static string GetMSbuildPath()
+        {
+            string systemRoot = Environment.GetEnvironmentVariable("SystemRoot");
+
+            string msbuildPath = Path.Combine(systemRoot, @"Microsoft.NET\Framework\v4.0.30319\MSBuild.exe");
+
+            if (!File.Exists(msbuildPath))
+            {
+                Console.WriteLine("MSbuild.exe não foi encontrado.");
+                FailExit();
+            }
+            return msbuildPath;
+        }
+
+        private static ProcessStartInfo GetMSbuildProcessInfo(string msbuildPath, string csprojFile)
+        {
+            ProcessStartInfo compilerInfo = new ProcessStartInfo();
+            compilerInfo.Arguments = String.Concat("/t:Build /nologo /clp:NoSummary;ErrorsOnly; /target:Compile /verbosity:quiet ", csprojFile);
+            compilerInfo.FileName = msbuildPath;
+            compilerInfo.WindowStyle = ProcessWindowStyle.Hidden;
+            compilerInfo.CreateNoWindow = true;
+            compilerInfo.UseShellExecute = false;
+            compilerInfo.RedirectStandardError = true;
+
+            return compilerInfo;
+        }
+
+        #region >> UTILITY        
+        private static string GetDirectoryFromPath(string fullPath)
+        {
+            return (File.Exists(fullPath) ? Path.GetDirectoryName(fullPath) : fullPath);
+        }
+
+        private static string GetFileNameFromPath(string fullPath)
+        {
+            return (File.Exists(fullPath) ? Path.GetFileName(fullPath) : string.Empty);
+        }     
 
         private static void FailExit()
         {
@@ -165,5 +200,6 @@ namespace SingleBuild
         {
             Environment.Exit(0);
         }
+        #endregion << UTILITY
     }
 }
