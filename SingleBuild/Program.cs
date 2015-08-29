@@ -6,9 +6,12 @@ using System.IO;
 //Rodrigo Campos
 //rod.apd[at]gmail.com
 
-namespace SingleBuild
+namespace RC.SingleBuild
 {
 
+    /// <summary>
+    /// Light object for trasfering basic file information to the FindAndExecute method.
+    /// </summary>
     internal class FileInfo
     {
         public string fileName { get; set; }
@@ -21,17 +24,18 @@ namespace SingleBuild
         
         private const string BUILD_FAIL = "Build falhou!";
         private const string BUILD_SUCCEEDED = "Build OK!";
-        private const string TIME_ELAPSED_FORMAT = "Tempo de execução: {0}ms";
+        private const string ELAPSED_TIME_FORMAT = "Tempo de execução: {0}ms";
         private const string CSPROJ_NOT_FOUND = "Arquivo .csproj não encontrado.";
-        private const string CSPROJ_FILTER = "*.csproj";
+        private const string PROJECT_FILE_FILTER = "*.csproj";
         private const string INVALID_DIRECTORY = "Diretório inválido.";
         private const string INVALID_ARGUMENT = "Argumento não informado.";
+        private const string EMPTY_STRING = "";
 
         #endregion << CONSTANTS
 
         static void Main(string[] args)
         {
-            CheckArguments(args);
+            ValidateArguments(args);
 
             var fullPath = args[0];
 
@@ -41,9 +45,15 @@ namespace SingleBuild
             };
 
             FindAndExecute(info);
-        } 
+        }
 
-        private static void CheckArguments(string[] args)
+        #region >> PRIVATE STATIC METHODS
+
+        /// <summary>
+        /// Validate command-line arguments.
+        /// </summary>
+        /// <param name="args">Arguments passedin to the main program.</param>
+        private static void ValidateArguments(string[] args)
         {
             if (args.Count() == 0)
             {
@@ -60,11 +70,15 @@ namespace SingleBuild
             }            
         }
 
+        /// <summary>
+        /// Makes recursive lookups on parent directories fiels until a project file is found.
+        /// </summary>
+        /// <param name="info">Instance of Info class.</param>
         private static void FindAndExecute(FileInfo info)
         {
             var currentDir = info.directory;
 
-            string[] projects = Directory.GetFiles(currentDir, CSPROJ_FILTER);
+            string[] projects = Directory.GetFiles(currentDir, PROJECT_FILE_FILTER);
 
             if (projects.Count() > 0)
             {
@@ -97,18 +111,27 @@ namespace SingleBuild
             }
         }
 
+        /// <summary>
+        /// Checks whether or not an parent directory exists.
+        /// </summary>
+        /// <param name="dir">The directory</param>
+        /// <returns>True or False.</returns>
         private static bool ParentDirectoryExists(string dir)
         {
             return (Directory.GetParent(dir) != null);
         }
 
-        private static void ExecuteProcess(string csprojFile)
+        /// <summary>
+        /// Execute MSbuild on the specified file.
+        /// </summary>
+        /// <param name="projectFile">project filename to build.</param>
+        private static void ExecuteProcess(string projectFile)
         {
             int exitCode = 0;
 
             string msbuildPath = GetMSbuildPath();
 
-            ProcessStartInfo compilerInfo = GetMSbuildProcessInfo(msbuildPath, csprojFile);
+            ProcessStartInfo compilerInfo = GetMSbuildProcessInfo(msbuildPath, projectFile);
 
             Stopwatch stopwatch = new Stopwatch();
 
@@ -138,11 +161,15 @@ namespace SingleBuild
             else
                 Console.WriteLine(BUILD_FAIL);
 
-            Console.WriteLine(TIME_ELAPSED_FORMAT, stopwatch.ElapsedMilliseconds.ToString());
+            Console.WriteLine(ELAPSED_TIME_FORMAT, stopwatch.ElapsedMilliseconds.ToString());
 
             SuccessExit();
         }
 
+        /// <summary>
+        /// Get the MSbuild fullpath based on %SystemRoot%.
+        /// </summary>
+        /// <returns>MSbuild fullpath.</returns>
         private static string GetMSbuildPath()
         {
             string systemRoot = Environment.GetEnvironmentVariable("SystemRoot");
@@ -157,10 +184,16 @@ namespace SingleBuild
             return msbuildPath;
         }
 
-        private static ProcessStartInfo GetMSbuildProcessInfo(string msbuildPath, string csprojFile)
+        /// <summary>
+        /// Prepares the MSbuild execution.
+        /// </summary>
+        /// <param name="msbuildPath">MSbuild fullpath.</param>
+        /// <param name="projectFile">project file fullpath.</param>
+        /// <returns>MSbuild ProcessStartInfo instance.</returns>
+        private static ProcessStartInfo GetMSbuildProcessInfo(string msbuildPath, string projectFile)
         {
             ProcessStartInfo compilerInfo = new ProcessStartInfo();
-            compilerInfo.Arguments = String.Concat("/t:Build /nologo /clp:NoSummary;ErrorsOnly; /target:Compile /verbosity:quiet ", csprojFile);
+            compilerInfo.Arguments = String.Concat("/t:Build /nologo /clp:NoSummary;ErrorsOnly; /target:Compile /verbosity:quiet ", projectFile);
             compilerInfo.FileName = msbuildPath;
             compilerInfo.WindowStyle = ProcessWindowStyle.Hidden;
             compilerInfo.CreateNoWindow = true;
@@ -169,6 +202,8 @@ namespace SingleBuild
 
             return compilerInfo;
         }
+
+        #endregion << PRIVATE STATIC METHODS
 
         #region >> UTILITY   
         private static bool isStringInFile(string file, string text)
