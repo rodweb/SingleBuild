@@ -24,7 +24,7 @@ namespace RC.SingleBuild
         
         private const string BUILD_FAIL = "Build falhou!";
         private const string BUILD_SUCCEEDED = "Build OK!";
-        private const string ELAPSED_TIME_FORMAT = "Tempo de execução: {0}ms";
+        private const string ELAPSED_TIME_FORMAT = "Tempo de execução: {0}s";
         private const string CSPROJ_NOT_FOUND = "Arquivo .csproj não encontrado.";
         private const string PROJECT_FILE_FILTER = "*.csproj";
         private const string INVALID_DIRECTORY = "Diretório inválido.";
@@ -32,6 +32,7 @@ namespace RC.SingleBuild
         private const string EMPTY_STRING = "";
 
         #endregion << CONSTANTS
+        private const string MSBUILD_NOT_FOUND = "MSbuild.exe não foi encontrado.";
 
         static void Main(string[] args)
         {
@@ -161,7 +162,7 @@ namespace RC.SingleBuild
             else
                 Console.WriteLine(BUILD_FAIL);
 
-            Console.WriteLine(ELAPSED_TIME_FORMAT, stopwatch.ElapsedMilliseconds.ToString());
+            Console.WriteLine(ELAPSED_TIME_FORMAT, stopwatch.Elapsed.Seconds.ToString());
 
             SuccessExit();
         }
@@ -178,7 +179,7 @@ namespace RC.SingleBuild
 
             if (!File.Exists(msbuildPath))
             {
-                Console.WriteLine("MSbuild.exe não foi encontrado.");
+                Console.WriteLine(MSBUILD_NOT_FOUND);
                 FailExit();
             }
             return msbuildPath;
