@@ -1,48 +1,49 @@
 ﻿using System;
-using System.Linq;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 
 //Rodrigo Campos
 //rod.apd[at]gmail.com
 
-namespace RC.SingleBuild
+namespace SingleBuild
 {
-
     /// <summary>
     /// Light object for trasfering basic file information to the FindAndExecute method.
     /// </summary>
     internal class FileInfo
     {
-        public string fileName { get; set; }
-        public string directory { get; set; }
+        public string FileName { get; set; }
+        public string Directory { get; set; }
     }
 
-    class Program
+    internal class Program
     {
         #region >> CONSTANTS
-        
-        private const string BUILD_FAIL = "Build falhou!";
-        private const string BUILD_SUCCEEDED = "Build OK!";
-        private const string ELAPSED_TIME_FORMAT = "Tempo de execução: {0}s";
-        private const string CSPROJ_NOT_FOUND = "Arquivo .csproj não encontrado.";
-        private const string PROJECT_FILE_FILTER = "*.csproj";
-        private const string INVALID_DIRECTORY = "Diretório inválido.";
-        private const string INVALID_ARGUMENT = "Argumento não informado.";
-        private const string EMPTY_STRING = "";
+
+        private const string BuildFail = "Build falhou!";
+        private const string BuildSucceeded = "Build OK!";
+        private const string ElapsedTimeFormat = "Tempo de execução: {0}s";
+        private const string CsprojNotFound = "Arquivo .csproj não encontrado.";
+        private const string ProjectFileFilter = "*.csproj";
+        private const string InvalidDirectory = "Diretório inválido.";
+        private const string InvalidArgument = "Argumento não informado.";
+        private const string MsbuildNotFound = "MSbuild.exe não foi encontrado.";
+        private const string SystemRootEnvVarNotFound = "Variável %SystemRoot% não encontrada.";
 
         #endregion << CONSTANTS
-        private const string MSBUILD_NOT_FOUND = "MSbuild.exe não foi encontrado.";
 
-        static void Main(string[] args)
+        private static void Main(string[] args)
         {
             ValidateArguments(args);
 
             var fullPath = args[0];
 
-            var info = new FileInfo {
-                fileName = GetFileNameFromPath(fullPath),
-                directory = GetDirectoryFromPath(fullPath)
+            var info = new FileInfo
+            {
+                FileName = GetFileNameFromPath(fullPath),
+                Directory = GetDirectoryFromPath(fullPath)
             };
 
             FindAndExecute(info);
@@ -54,21 +55,18 @@ namespace RC.SingleBuild
         /// Validate command-line arguments.
         /// </summary>
         /// <param name="args">Arguments passedin to the main program.</param>
-        private static void ValidateArguments(string[] args)
+        private static void ValidateArguments(IReadOnlyList<string> args)
         {
-            if (args.Count() == 0)
+            if (!args.Any())
             {
-                Console.WriteLine(INVALID_ARGUMENT);
-                FailExit();
+                FailWithMsg(InvalidArgument);
             }
 
             var dirPath = GetDirectoryFromPath(args[0]);
 
-            if (!Directory.Exists(dirPath))
-            {
-                Console.WriteLine(INVALID_DIRECTORY);
-                FailExit();
-            }            
+            if (Directory.Exists(dirPath)) return;
+
+            FailWithMsg(InvalidDirectory);
         }
 
         /// <summary>
@@ -77,13 +75,13 @@ namespace RC.SingleBuild
         /// <param name="info">Instance of Info class.</param>
         private static void FindAndExecute(FileInfo info)
         {
-            var currentDir = info.directory;
+            var currentDir = info.Directory;
 
-            string[] projects = Directory.GetFiles(currentDir, PROJECT_FILE_FILTER);
+            var projects = Directory.GetFiles(currentDir, ProjectFileFilter);
 
-            if (projects.Count() > 0)
+            if (projects.Any())
             {
-                if (info.fileName.Equals(string.Empty))
+                if (info.FileName.Equals(string.Empty))
                 {
                     ExecuteProcess(projects[0]);
                 }
@@ -91,23 +89,22 @@ namespace RC.SingleBuild
                 {
                     foreach (var project in projects)
                     {
-                        if (isStringInFile(project, info.fileName))
-                        {
-                            ExecuteProcess(project);
-                            break;
-                        }
+                        if (!IsStringInFile(project, info.FileName)) continue;
+
+                        ExecuteProcess(project);
+                        break;
                     }
                 }
                 SuccessExit();
             }
             else if (!ParentDirectoryExists(currentDir))
             {
-                Console.WriteLine(CSPROJ_NOT_FOUND);
+                Console.WriteLine(CsprojNotFound);
                 FailExit();
             }
             else
             {
-                info.directory = Directory.GetParent(currentDir).FullName;
+                info.Directory = Directory.GetParent(currentDir).FullName;
                 FindAndExecute(info);
             }
         }
@@ -128,27 +125,44 @@ namespace RC.SingleBuild
         /// <param name="projectFile">project filename to build.</param>
         private static void ExecuteProcess(string projectFile)
         {
-            int exitCode = 0;
+            var exitCode = 0;
 
-            string msbuildPath = GetMSbuildPath();
+            var msbuildPath = GetMSbuildPath();
 
-            ProcessStartInfo compilerInfo = GetMSbuildProcessInfo(msbuildPath, projectFile);
+            var compilerInfo = GetMSbuildProcessInfo(msbuildPath, projectFile);
 
-            Stopwatch stopwatch = new Stopwatch();
-
-            try
+            Action compilar = () =>
             {
-                stopwatch.Start();
-                using (Process compiler = Process.Start(compilerInfo))
+                using (var compiler = Process.Start(compilerInfo))
                 {
+                    //TODO: Add fail with msg
+                    if (compiler == null) return;
+
                     Console.WriteLine(compiler.StandardError.ReadToEnd());
 
                     compiler.WaitForExit();
 
                     exitCode = compiler.ExitCode;
                 }
+            };
+
+            WithDuration(compilar);
+
+            Console.WriteLine(exitCode == 0 ? BuildSucceeded : BuildFail);
+
+            SuccessExit();
+        }
+
+
+        private static void WithDuration(Action action)
+        {
+            var stopwatch = new Stopwatch();
+            stopwatch.Start();
+            try
+            {
+                action();
             }
-            catch (Exception)
+            catch
             {
                 FailExit();
             }
@@ -157,14 +171,7 @@ namespace RC.SingleBuild
                 stopwatch.Stop();
             }
 
-            if (exitCode == 0)
-                Console.WriteLine(BUILD_SUCCEEDED);
-            else
-                Console.WriteLine(BUILD_FAIL);
-
-            Console.WriteLine(ELAPSED_TIME_FORMAT, stopwatch.Elapsed.Seconds.ToString());
-
-            SuccessExit();
+            Console.WriteLine(ElapsedTimeFormat, stopwatch.Elapsed.Seconds.ToString());
         }
 
         /// <summary>
@@ -173,15 +180,19 @@ namespace RC.SingleBuild
         /// <returns>MSbuild fullpath.</returns>
         private static string GetMSbuildPath()
         {
-            string systemRoot = Environment.GetEnvironmentVariable("SystemRoot");
+            var systemRoot = Environment.GetEnvironmentVariable("SystemRoot");
 
-            string msbuildPath = Path.Combine(systemRoot, @"Microsoft.NET\Framework\v4.0.30319\MSBuild.exe");
+            if (systemRoot == null)
+            {
+                FailWithMsg(SystemRootEnvVarNotFound);
+                throw new NotImplementedException();
+            }
+
+            var msbuildPath = Path.Combine(systemRoot, @"Microsoft.NET\Framework\v4.0.30319\MSBuild.exe");
 
             if (!File.Exists(msbuildPath))
-            {
-                Console.WriteLine(MSBUILD_NOT_FOUND);
-                FailExit();
-            }
+                FailWithMsg(MsbuildNotFound);
+
             return msbuildPath;
         }
 
@@ -193,13 +204,17 @@ namespace RC.SingleBuild
         /// <returns>MSbuild ProcessStartInfo instance.</returns>
         private static ProcessStartInfo GetMSbuildProcessInfo(string msbuildPath, string projectFile)
         {
-            ProcessStartInfo compilerInfo = new ProcessStartInfo();
-            compilerInfo.Arguments = String.Concat("/t:Build /nologo /clp:NoSummary;ErrorsOnly; /target:Compile /verbosity:quiet ", projectFile);
-            compilerInfo.FileName = msbuildPath;
-            compilerInfo.WindowStyle = ProcessWindowStyle.Hidden;
-            compilerInfo.CreateNoWindow = true;
-            compilerInfo.UseShellExecute = false;
-            compilerInfo.RedirectStandardError = true;
+            var compilerInfo = new ProcessStartInfo
+            {
+                Arguments =
+                    string.Concat("/t:Build /nologo /clp:NoSummary;ErrorsOnly; /target:Compile /verbosity:quiet ",
+                        projectFile),
+                FileName = msbuildPath,
+                WindowStyle = ProcessWindowStyle.Hidden,
+                CreateNoWindow = true,
+                UseShellExecute = false,
+                RedirectStandardError = true
+            };
 
             return compilerInfo;
         }
@@ -207,19 +222,16 @@ namespace RC.SingleBuild
         #endregion << PRIVATE STATIC METHODS
 
         #region >> UTILITY   
-        private static bool isStringInFile(string file, string text)
-        {
-            var found = false;
-            foreach (var line in File.ReadLines(file))
-            {
-                if (line.Contains(text))
-                {
-                    found = true;
-                    break;
-                }
-            }
 
-            return found;
+        private static void FailWithMsg(string message)
+        {
+            Console.WriteLine(message);
+            FailExit();
+        }
+
+        private static bool IsStringInFile(string file, string text)
+        {
+            return File.ReadLines(file).Any(line => line.Contains(text));
         }
 
         private static string GetDirectoryFromPath(string fullPath)
@@ -230,7 +242,7 @@ namespace RC.SingleBuild
         private static string GetFileNameFromPath(string fullPath)
         {
             return (File.Exists(fullPath) ? Path.GetFileName(fullPath) : string.Empty);
-        }     
+        }
 
         private static void FailExit()
         {
@@ -241,6 +253,7 @@ namespace RC.SingleBuild
         {
             Environment.Exit(0);
         }
+
         #endregion << UTILITY
     }
 }
