@@ -35,15 +35,13 @@ namespace SingleBuild
         #endregion << CONSTANTS
 
         private static void Main(string[] args)
-        {
-            ValidateArguments(args);
-
-            var fullPath = args[0];
+        {            
+            var path = ValidateArguments(args);
 
             var info = new FileInfo
             {
-                FileName = GetFileNameFromPath(fullPath),
-                Directory = GetDirectoryFromPath(fullPath)
+                FileName = GetFileNameFromPath(path),
+                Directory = GetDirectoryFromPath(path)
             };
 
             FindAndExecute(info);
@@ -55,18 +53,19 @@ namespace SingleBuild
         /// Validate command-line arguments.
         /// </summary>
         /// <param name="args">Arguments passedin to the main program.</param>
-        private static void ValidateArguments(IReadOnlyList<string> args)
+        private static string ValidateArguments(IReadOnlyList<string> args)
         {
-            if (!args.Any())
-            {
-                FailWithMsg(InvalidArgument);
-            }
+            var dirPath = (args.Any() ? GetDirectoryFromPath(args[0]) : GetDirectoryFromApplication());
 
-            var dirPath = GetDirectoryFromPath(args[0]);
+            if (!Directory.Exists(dirPath))
+                FailWithMsg(InvalidDirectory);
 
-            if (Directory.Exists(dirPath)) return;
+            return dirPath;
+        }
 
-            FailWithMsg(InvalidDirectory);
+        private static string GetDirectoryFromApplication()
+        {
+            return AppDomain.CurrentDomain.BaseDirectory;
         }
 
         /// <summary>
@@ -148,6 +147,7 @@ namespace SingleBuild
 
             WithDuration(compilar);
 
+            Console.WriteLine("Compilando {0}...", projectFile);
             Console.WriteLine(exitCode == 0 ? BuildSucceeded : BuildFail);
 
             SuccessExit();

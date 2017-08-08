@@ -229,3 +229,6 @@ $RECYCLE.BIN/
 
 # Windows shortcuts
 *.lnk
+/.idea/.idea.SingleBuild/.idea
+/.vs/SingleBuild.sqlite
+/.idea/.idea.SingleBuild
